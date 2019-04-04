@@ -1,0 +1,60 @@
+Gather information about traces:
+$ gdb ~eggert/bin64/bin/emacs-26.1
+
+Set breakpoint at Ftimes function
+(gdb) b Ftimes
+Output: Breakpoint 1 at 0x54e0f0: file ../../emacs-26.1/src/data.c, line 2943.
+
+Set dissassemble-next-line on as instructed in assignment
+(gdb) set disassemble-next-line on
+
+Record outputs to gdb.txt
+(gdb) set logging on
+Output: Copying output to gdb.txt.
+
+Actually start the debugging. r for run
+(gdb) run -Q -batch -eval '(print (* 1250284240 -1844255039))'
+
+Use 
+(gdb) si
+(gdb) info r
+to figure out the info in the registers as well as the instructions each take
+
+used some sed commands to clean up a bit
+sed 's/0x[0]*//g' to get rid of 0x
+sed 's/<.*>://g' to get rid of function name
+sed 's/\s*\s/\t/g' to get rid of spaces
+
+
+
+
+
+
+
+$ gcc -O2 -c testovf.c
+$ objdump -d testovf.o
+
+$ gcc -O2 -fwrapv -c testovf.c
+$ objdump -d testovf.o 
+
+$ gcc -O2 -fsanitize=undefined -c testovf.c
+didn't work. forgot to append path
+$ PATH=/usr/local/cs/bin:$PATH
+tried again. worked this time
+$ objdump -d testovf.o
+
+put stuff into tostovf.txt and wrote my answer
+
+
+
+
+
+
+
+
+$ vim answers.txt
+wrote my answers
+
+
+
+

@@ -1,0 +1,62 @@
+A) Yea
+The right hand data loses data when converting to double
+and loses more data when converting to float. 
+This leaves only the most significant bits 
+
+Similarly, the left hand side only leaves the most significant bits
+when converting to a float. So they end up the same
+ 
+
+B) No
+The right hand side has problems when subtracting a very
+large number with a very large negative number (or vice versa)
+this results in an overflow (because -fwrapv), and leads to
+mathematically incorrect results
+
+On the other hand. the left hand side does not have this quirk
+(since even if it overflows, it gives -Inf or Inf) 
+Thus, this equation will be inconsistent if the right hand side overflows
+for example if
+x = MAX_INT
+y = MIN_INT
+
+x - y = not mathematically correct answer
+
+but dx - dy is chillin
+since doubles go up to 2^64 anyways, adding both of them 
+gives the mathematically correct answer
+despite it rounding a bit
+
+
+C) No
+Especially if all of these numbers are of different powers, 
+the rounding can be a problem and can give different answers
+because information is lost
+for example:
+dx = 100000000
+dy = -100000000
+dz = 1
+
+(dx + dy) + dz = 1
+dx + (dy + dz) = 0 because the 1 gets dropped off since there no
+precision to hold it
+
+
+D) No
+Rounding errors give it problems,
+for example
+dx = 2
+dy = 5
+dz = 222222222
+
+(dx * dy) * dz = 2222222220
+dx * (dy * dz) = not the same because it rounds off
+
+or something like that. harder to prove without gcc
+
+
+E) No
+If dx or/and dz are 0, 
+then it doesn't work since it gives a NaN. 
+Otherwise it's okay
+

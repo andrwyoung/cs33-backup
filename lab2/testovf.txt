@@ -1,0 +1,54 @@
+$ gcc -O2 -c testovf.c
+	0:	31 c0                	xor    %eax,%eax
+	2:	c3                   	retq  
+-O2 is undefined because of the big number already, so it just returns 0
+
+
+
+
+
+
+
+
+
+$ gcc -O2 -fwrapv -c testovf.c
+	0:	48 b8 ff ff ff ff ff 	movabs $0x7fffffffffffffff,%rax
+	7:	ff ff 7f 
+	a:	48 01 f8             	add    %rdi,%rax
+	d:	48 39 f8             	cmp    %rdi,%rax
+ 	10:	0f 9c c0             	setl   %al
+  	13:	c3                   	retq 
+fwrapv lets overflow, so the program just lets it overflow naturally
+
+
+
+
+
+
+
+
+
+
+
+$ gcc -O2 -fsanitize=undefined -c tesovf.c
+       0:	55 	pushq	%rbp
+       1:	48 89 e5 	movq	%rsp, %rbp
+       4:	41 56 	pushq	%r14
+       6:	53 	pushq	%rbx
+       7:	49 89 fe 	movq	%rdi, %r14
+       a:	48 ba ff ff ff ff ff ff ff 7f 	movabsq	$9223372036854775807, %rdx
+      14:	4c 89 f3 	movq	%r14, %rbx
+      17:	48 01 d3 	addq	%rdx, %rbx
+      1a:	70 0b 	jo	11 <_testovf+0x27>
+      1c:	4c 39 f3 	cmpq	%r14, %rbx
+      1f:	0f 9c c0 	setl	%al
+      22:	5b 	popq	%rbx
+      23:	41 5e 	popq	%r14
+      25:	5d 	popq	%rbp
+      26:	c3 	retq
+      27:	48 8d 3d 00 00 00 00 	leaq	(%rip), %rdi
+      2e:	4c 89 f6 	movq	%r14, %rsi
+      31:	e8 00 00 00 00 	callq	0 <_testovf+0x36>
+      36:	eb e4 	jmp	-28 <_testovf+0x1c>
+function calls another function if overflows, and just compares normally if not overflowed
+

@@ -1,0 +1,7 @@
+A. The code always succeeds because size_t is an unsigned integer, and subtraction with an unsigned and an signed integer always produces a unsigned integer. Therefore the answer will never be negative
+
+B.  void copy_int(int val, void *buf, int maxbytes)
+{
+	if(maxbytes-(int) sizeof(val) >= 0))
+		memcpy(buf, (void *) &val, sizeof(val));
+}

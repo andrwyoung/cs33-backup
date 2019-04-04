@@ -1,0 +1,22 @@
+A. False becuase flipping INT_MIN gives an overflow
+	y = INT_MIN and x = -69
+	left side = true
+	right side = false
+
+
+B. False probably a lot. If x or y is big enough, left hand side will overflow and result is unpredictable
+
+C. False
+	y = INT_MAX and x = INT_MAX 
+	left side = 1
+	right side = 0
+
+D. False because (y - x)'s sign bit could be flipped, causing the unsigned casting to give the wrong number
+
+E. True becuase concatanating the bits can only lose information
+
+F. True because the (ux & (-1 << 31)) accounts for the missing arithmatic bit if needed
+
+G. True because 8 is a power of 2
+
+

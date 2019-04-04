@@ -1,0 +1,68 @@
+1) 54e014	48 8d 04 ad 02 00 00 00	lea    0x2(,%rbp,4),%rax	rax=0x7fffffff73ab3b42
+gives the wrong answer since it's the last 
+instruction that puts something into rax, 
+which is where we want the final answer
+This is probably because it overflowed when multiplying rbp with 4
+
+
+
+
+2) Looking in ~eggert/src/emacs-26.1/
+$ grep -rnw './' -e 'most-negative-fixnum'
+data.c line 3888: most-negative-fixnum is Vmost_negative_fixnum
+
+$ grep -rnw './' -e 'Vmost_negative_fixnum'
+data.c line 3891: Vmost_negative_fixnum is MOST_NEGATIVE_FIXNUM
+
+$ grep -rnw './' -e 'MOST_NEGATIVE_FIXNUM'
+lisp.h line 937: MOST_NEGATIVE_FIXNUM is (-1 - MOST_POSITIVE_FIXNUM)
+
+$ grep -rnw './' -e 'MOST_POSITIVE_FIXNUM'
+lisp.h line 936: MOST_POSITIVE_FIXNUM is (EMACS_INT_MAX >> INTTYPEBITS)
+
+$ grep -rnw './' -e 'EMACS_INT_MAX'
+lisp.h line 90: MOST_POSITIVE_FIXNUM is LONG_MAX since on x86-64
+thus EMACS_INT_MAX is 0x7fffffffffffffff
+
+$ grep -rnw './' -e 'INTTYPEBITS'
+lisp.h line 244: INTTYPEBITS is (GCTYPEBITS - 1)
+$ grep -rnw './' -e 'GCTYPEBITS'
+lisp.h line 1319: GCTYPEBITS is 3
+thus INTTYPEBITS is 2
+
+Thus MOST_POSITIVE_FIXNUM is 0x7fffffffffffffff >> 2
+which is 0x1fffffffffffffff
+
+-1 - 0x1fffffffffffffff is 0xE000000000000000
+which is exactly -2305843009213693952
+
+
+
+
+
+3) Looking in ~eggert/src/emacs-26.1/
+$ grep -rnw './' -e 'overflow'
+data.c line 2829: overflow |= INT_MULTIPLY_WRAPV (accum, next, &accum)
+
+quick google gives 
+"INT_MULTIPLY_WRAPV (a, b, r)
+Store the low-order bits of the product of a and b into *r. 
+Return true if overflow occurred, false if the low-order 
+bits are the mathematically-correct product."
+
+thus since product will overflow, the answer will be 1
+
+
+
+
+
+4) As with the usual behavior of 2's complement overflow
+using -fwrapv won't give a warning if it overflows
+and can cause undetected incorrect answers
+
+
+
+
+
+
+

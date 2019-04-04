@@ -1,0 +1,102 @@
+first transferred the file over the lnxsrv
+then unzipped file
+$ tar -xzf openmplab.tgz
+
+tested original file first 
+$ make seq
+$ ./seq
+	FUNC TIME : 0.795361
+	TOTAL TIME : 3.149334
+
+then checked the gprof
+$ make seq GPROF=1
+$ gprof seq
+	Each sample counts as 0.01 seconds.
+	  %   cumulative   self              self     total           
+	 time   seconds   seconds    calls  ms/call  ms/call  name    
+	 75.40      0.64     0.64       15    42.72    43.87  func1
+	 10.60      0.73     0.09  5177344     0.00     0.00  rand2
+	  4.71      0.77     0.04        1    40.05   113.06  addSeed
+	  3.53      0.80     0.03   491520     0.00     0.00  findIndexBin
+	  2.36      0.82     0.02        2    10.01    10.01  init
+	  1.18      0.83     0.01       15     0.67     2.67  func5
+	  1.18      0.84     0.01        1    10.01    10.01  imdilateDisk
+	  1.18      0.85     0.01                             sequence
+	  0.00      0.85     0.00   983042     0.00     0.00  round
+	  0.00      0.85     0.00       16     0.00     0.00  dilateMatrix
+	  0.00      0.85     0.00       15     0.00     0.00  func2
+	  0.00      0.85     0.00       15     0.00     0.00  func3
+	  0.00      0.85     0.00       15     0.00     0.00  func4
+	  0.00	     0.85     0.00       15     0.00     0.00  rand1
+	  0.00      0.85     0.00        2     0.00     0.00  get_time
+	  0.00      0.85     0.00        1     0.00     0.00  elapsed_time
+	  0.00      0.85     0.00        1     0.00     0.00  fillMatrix
+	  0.00      0.85     0.00        1     0.00     0.00  func0
+	  0.00      0.85     0.00        1     0.00     0.00  getNeighbors
+shows that this code spends most of it's time in func1
+thus it's reasonable to just focus on optimizing func1
+we don't really even have to worry about the other functions
+
+at first I tried combining the for loops
+but that didn't really make it any faster
+learned how to use openMP (like I should have from the beginning)
+
+optimized func1 by adding 3 parallel threads to each for loop
+used 16 because it's seems like a good number
+$ make omp 
+$ ./omp
+	FUNC TIME : 0.131943
+	TOTAL TIME : 2.511227
+nice! that's a x6ish speedup
+
+let's try changing thread number maximize time
+32 thread
+$ make omp 
+$ ./omp
+	FUNC TIME : 0.375679
+	TOTAL TIME : 2.730640
+yikes 
+
+24 threads?
+$ make omp 
+$ ./omp
+	FUNC TIME : 0.112945
+	TOTAL TIME : 2.606862
+oh thats good
+
+try a few more. 20?
+$ make omp 
+$ ./omp
+	FUNC TIME : 0.114396
+	TOTAL TIME : 2.303714
+a bit worse actually 
+
+28?
+$ make omp 
+$ ./omp
+	FUNC TIME : 0.353218
+	TOTAL TIME : 2.655865
+yikes no thanks
+
+
+let's just stick with 24
+aaand, it's about 7ish times faster (0.795361 / 0.114396 = 6.958)
+and you know what? I don't have particularly high ambitions
+so I'm happy with that!
+
+
+
+
+nevermind. Friend convinced me to do better
+just slapped on #pragmas everywhere
+making sure I did private() and reduction(+:) carefully
+$ make omp
+$ make check
+	yea it's cool
+$ ./omp
+	FUNC TIME : 0.052378
+	TOTAL TIME : 2.131960
+now it's about 15ish times faster (0.795361 / 0.052378 = 15.185)
+
+
+

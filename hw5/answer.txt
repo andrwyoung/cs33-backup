@@ -1,0 +1,19 @@
+12.17:
+A) The main thread didn't wait for the thread to finish 
+So it just went on ahead and exited without it. Sad
+
+B) We can either use pthread_join or pthread_exit
+This will wait for the thread to finish before exiting
+
+
+
+12.25:
+echo_cnt is thread safe in this example
+since server uses echo_cnt to service different clients
+and it has a mutex to protect it from itself
+if it served the same client, there might be problems
+
+echo_cnt is not reentrant though
+since it uses the global variables
+so it would reuse the same mutex
+and walk over itself

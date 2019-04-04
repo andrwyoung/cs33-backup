@@ -1,0 +1,8 @@
+the strictest alignment is a long, which is 4 bytes
+therefore everything else must be offset of 4 bytes
+
+the first instruction tells us that B must be between 5 and 8
+second instruction tells us that A must be between 7 and 10
+third instruction tells us that A * B must be between 45 and 46
+
+Thus the only number that works is B = 5 and A = 9

